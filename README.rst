@@ -1,6 +1,6 @@
-#################
+#########################
 Python DB API OpenTracing
-#################
+#########################
 
 This package enables distributed tracing in `Python Database API 2.0`_ compatible-clients
 via `The OpenTracing Project`_.  Once a production system contends with real concurrency or splits
@@ -28,7 +28,7 @@ Run the following command:
 
 .. code-block:: 
 
-    $ git clone https://github.com/signalfx/python-dbapi.git && pip install ./python-dbapi
+    $ pip install dbapi-opentracing
 
 Usage
 =====
@@ -68,7 +68,7 @@ or
 
 
 Trace All Cursor Commands
-------------------
+-------------------------
 
 .. code-block:: python
 
@@ -89,7 +89,7 @@ Trace All Cursor Commands
     tracing.commit()
 
 Trace All Connection Commands (implicit ``commit()`` and ``rollback()``)
-------------------
+------------------------------------------------------------------------
 
 .. code-block:: python
 
