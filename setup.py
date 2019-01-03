@@ -31,7 +31,7 @@ integration_test_requirements = ['docker', 'psycopg2', 'pymysql']
 
 setup(
     name='DBAPI-OpenTracing',
-    version='0.0.1',
+    version='0.0.2',
     url='http://github.com/signalfx/python-dbapi',
     download_url='http://github.com/signalfx/python-dbapi/tarball/master',
     author='SignalFx, Inc.',
