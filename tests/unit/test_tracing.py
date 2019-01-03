@@ -8,17 +8,14 @@ import pytest
 
 from dbapi_opentracing.tracing import ConnectionTracing
 
-
 row_count = 'SomeRowCount'
 
 
 class SomeException(Exception):
-
     pass
 
 
 class MockDBAPICursor(Mock):
-
     execute = Mock(spec=types.MethodType)
     execute.__name__ = 'execute'
 
@@ -38,7 +35,6 @@ class MockDBAPICursor(Mock):
 
 
 class MockDBAPIConnection(Mock):
-
     cursor = Mock(spec=types.MethodType, return_value=MockDBAPICursor())
 
     commit = Mock(spec=types.MethodType)
@@ -101,6 +97,24 @@ class TestConnectionTracingCursorContext(DBAPITestSuite):
         assert span.tags['db.rows_produced'] == row_count
 
 
+class TestConnectionTracingCursorWhitelist(DBAPITestSuite):
+
+    def test_execute_is_not_traced(self):
+        with self.connection.cursor(trace_execute=False) as cursor:
+            cursor.execute('SELECT * FROM SOME_TABLE')
+        assert not self.tracer.finished_spans()
+
+    def test_executemany_is_not_traced(self):
+        with self.connection.cursor(trace_executemany=False) as cursor:
+            cursor.executemany('DROP DB')
+        assert not self.tracer.finished_spans()
+
+    def test_callproc_is_not_traced(self):
+        with self.connection.cursor(trace_callproc=False) as cursor:
+            cursor.callproc('my_procedure')
+        assert not self.tracer.finished_spans()
+
+
 class TestConnectionTracingConnectionContext(DBAPITestSuite):
 
     def test_execute_and_commit_are_traced(self):
@@ -114,6 +128,8 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
         assert execute.tags[tags.DATABASE_TYPE] == 'sql'
         assert execute.tags[tags.DATABASE_STATEMENT] == statement
         assert execute.tags['db.rows_produced'] == row_count
+        assert commit.operation_name == 'MockDBAPIConnection.commit()'
+        assert commit.tags == {tags.DATABASE_TYPE: 'sql'}
 
     def test_executemany_and_commit_are_traced(self):
         statement = 'INSERT INTO some_table VALUES (%s, %s, %s)'
@@ -126,6 +142,8 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
         assert executemany.tags[tags.DATABASE_TYPE] == 'sql'
         assert executemany.tags[tags.DATABASE_STATEMENT] == statement
         assert executemany.tags['db.rows_produced'] == row_count
+        assert commit.operation_name == 'MockDBAPIConnection.commit()'
+        assert commit.tags == {tags.DATABASE_TYPE: 'sql'}
 
     def test_callproc_and_commit_are_traced(self):
         procedure = 'my_procedure'
@@ -138,6 +156,8 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
         assert callproc.tags[tags.DATABASE_TYPE] == 'sql'
         assert callproc.tags[tags.DATABASE_STATEMENT] == procedure
         assert callproc.tags['db.rows_produced'] == row_count
+        assert commit.operation_name == 'MockDBAPIConnection.commit()'
+        assert commit.tags == {tags.DATABASE_TYPE: 'sql'}
 
     def test_execute_and_rollback_are_traced(self):
         statement = 'SELECT * FROM some_table'
@@ -154,6 +174,8 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
         assert execute.tags[tags.ERROR] is True
         assert 'db.rows_produced' not in execute.tags
         assert 'SomeException' in execute.logs[0].key_values['error.object']
+        assert rollback.operation_name == 'MockDBAPIConnection.rollback()'
+        assert rollback.tags == {tags.DATABASE_TYPE: 'sql'}
 
     def test_executemany_and_rollback_are_traced(self):
         statement = 'INSERT INTO some_table VALUES (%s, %s, %s)'
@@ -186,6 +208,59 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
         assert callproc.tags[tags.ERROR] is True
         assert 'db.rows_produced' not in callproc.tags
         assert 'SomeException' in callproc.logs[0].key_values['error.object']
+        assert rollback.operation_name == 'MockDBAPIConnection.rollback()'
+        assert rollback.tags == {tags.DATABASE_TYPE: 'sql'}
+
+
+class TestConnectionTracingConnectionContextWhitelist(DBAPITestSuite):
+
+    def test_execute_and_commit_are_not_traced(self):
+        connection = ConnectionTracing(self.dbapi_connection, self.tracer,
+                                       trace_execute=False, trace_commit=False)
+        with connection as cursor:
+            cursor.execute('SELECT * FROM SOME_TABLE')
+        assert not self.tracer.finished_spans()
+
+    def test_executemany_and_commit_are_not_traced(self):
+        connection = ConnectionTracing(self.dbapi_connection, self.tracer,
+                                       trace_executemany=False, trace_commit=False)
+        with connection as cursor:
+            cursor.executemany('INSERT INTO some_table VALUES (%s, %s, %s)')
+        assert not self.tracer.finished_spans()
+
+    def test_callproc_and_commit_are_not_traced(self):
+        connection = ConnectionTracing(self.dbapi_connection, self.tracer,
+                                       trace_callproc=False, trace_commit=False)
+        with connection as cursor:
+            cursor.callproc('my_procedure')
+        assert not self.tracer.finished_spans()
+
+    def test_execute_and_rollback_are_not_traced(self):
+        connection = ConnectionTracing(self.dbapi_connection, self.tracer,
+                                       trace_execute=False, trace_rollback=False)
+        with connection as cursor:
+            with patch.object(MockDBAPICursor, 'execute', side_effect=SomeException()) as execute:
+                execute.__name__ = 'execute'
+                cursor.execute('SELECT * FROM some_table')
+        assert not self.tracer.finished_spans()
+
+    def test_executemany_and_rollback_are_not_traced(self):
+        connection = ConnectionTracing(self.dbapi_connection, self.tracer,
+                                       trace_executemany=False, trace_rollback=False)
+        with connection as cursor:
+            with patch.object(MockDBAPICursor, 'executemany', side_effect=SomeException()) as executemany:
+                executemany.__name__ = 'executemany'
+                cursor.executemany('INSERT INTO some_table VALUES (%s, %s, %s)')
+        assert not self.tracer.finished_spans()
+
+    def test_callproc_and_rollback_are_not_traced(self):
+        connection = ConnectionTracing(self.dbapi_connection, self.tracer,
+                                       trace_callproc=False, trace_rollback=False)
+        with connection as cursor:
+            with patch.object(MockDBAPICursor, 'callproc', side_effect=SomeException()) as callproc:
+                callproc.__name__ = 'callproc'
+                cursor.callproc('my_procedure')
+        assert not self.tracer.finished_spans()
 
 
 class TestConnectionTracing(object):

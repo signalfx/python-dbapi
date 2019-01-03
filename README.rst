@@ -34,7 +34,7 @@ Usage
 =====
 
 This DB API extension allows the tracing of database queries using the OpenTracing API. All that it
-requires is for a ``ConnectionTracing`` tracer to be initialized using an instance of an OpenTracing
+requires is for a ``ConnectionTracing`` tracer to be initialized using an instance of an OpenTracing 2.0-compatible
 tracer and a DB API ``Connection`` object. You can either trace all commands sent to your database, or
 use a ``Cursor`` to trace individual requests.
 
@@ -66,7 +66,28 @@ or
     connection = db_api_compatible_client.connect(...)
     tracing = ConnectionTracing(connection)
 
+ConnectionTracing Configuration
+-------------------------------
 
+Along with optionally providing an OpenTracing 2.0-compatible tracer, ``ConnectionTracing`` also accepts a ``span_tags``
+named argument and several traced method disabling flags: ``trace_execute``, ``trace_executemany``,
+``trace_callproc``, ``trace_commit``, and ``trace_rollback`` to specify the command types you'd like not to trace
+(all are ``True`` by default).
+
+.. code-block:: python
+
+    from dbapi_opentracing import ConnectionTracing
+    from opentracing.ext import tags
+    import db_api_compatible_client
+
+    opentracing_tracer = ## some OpenTracing tracer implementation
+    connection = db_api_compatible_client.connect(...)
+    tracing = ConnectionTracing(connection, opentracing_tracer,
+                                # span_tags will be used for all generated spans
+                                span_tags={'Custom': 'Tag', tags.DATABASE_TYPE: 'PostgreSQL'},
+                                trace_callproc=False, trace_commit=False)
+    # Note that the default OpenTracing 'db.type' tag will have 'sql' as a value.
+    # If a more specific type is desired, you can set it with the span_tags dictionary argument as shown.
 Trace All Cursor Commands
 -------------------------
 
@@ -80,11 +101,39 @@ Trace All Cursor Commands
     tracing = ConnectionTracing(connection, opentracing_tracer,
                                 span_tags={'Custom': 'Tag'})  # span_tags will be used for all generated spans
 
+    # Please note that the default OpenTracing 'db.type' tag will have 'sql' as a value.
+    # If a more specific type is desired, you can set it with the span_tags dictionary argument
+
     with tracing.cursor() as cursor:
         cursor.execute('SELECT * FROM TABLE')
         vals = cursor.fetchall()
         cursor.executemany('INSERT INTO TABLE VALUES (%s, %s)',
                            [('one', 'two'), ('three', 'four')])
+        cursor.callproc('MyStoredProcedure')
+    tracing.commit()
+
+Trace Specific Cursor Command Types
+-----------------------------------
+
+.. code-block:: python
+
+    from dbapi_opentracing import ConnectionTracing
+    import db_api_compatible_client
+
+    opentracing_tracer = ## some OpenTracing tracer implementation
+    connection = db_api_compatible_client.connect(...)
+    tracing = ConnectionTracing(connection, opentracing_tracer,
+                                span_tags={'Custom': 'Tag'})  # span_tags will be used for all generated spans
+
+    # Provide False values for optional trace_execute, trace_executemany, and/or trace_callproc named arguments
+    with tracing.cursor(trace_executemany=False, trace_callproc=False) as cursor:
+        # Traced query
+        cursor.execute('SELECT * FROM TABLE')
+        vals = cursor.fetchall()
+        # Untraced command
+        cursor.executemany('INSERT INTO TABLE VALUES (%s, %s)',
+                           [('one', 'two'), ('three', 'four')])
+        # Untraced command
         cursor.callproc('MyStoredProcedure')
     tracing.commit()
 
@@ -107,8 +156,33 @@ Trace All Connection Commands (implicit ``commit()`` and ``rollback()``)
                            [('one', 'two'), ('three', 'four')])
         cursor.callproc('MyStoredProcedure')
 
-Trace Individual Commands
--------------------------
+Trace Specific Connection Command Types
+---------------------------------------
+
+.. code-block:: python
+
+    from dbapi_opentracing import ConnectionTracing
+    import db_api_compatible_client
+
+    opentracing_tracer = ## some OpenTracing tracer implementation
+    connection = db_api_compatible_client.connect(...)
+    # Provide False values for optional trace_execute, trace_executemany, trace_callproc, trace_commit,
+    # and/or trace_rollback named arguments
+    tracing = ConnectionTracing(connection, opentracing_tracer, trace_execute=False, trace_commit=False)
+
+    with tracing as cursor:  # If DB API client supports Connection as context manager
+        # Untraced query
+        cursor.execute('SELECT * FROM TABLE')
+        vals = cursor.fetchall()
+        # Traced command
+        cursor.executemany('INSERT INTO TABLE VALUES (%s, %s)',
+                           [('one', 'two'), ('three', 'four')])
+        # Traced command
+        cursor.callproc('MyStoredProcedure')
+    # Implicit commit() is not traced because of named argument value
+
+Trace Individual Commands Without Named Arguments
+-------------------------------------------------
 
 .. code-block:: python
 
@@ -125,7 +199,7 @@ Trace Individual Commands
         Cursor(cursor).execute('SELECT * FROM TABLE_TWO')  
         # Traced query with custom tags
         Cursor(cursor, span_tags={'Query': 'Tag', 'Another': 'Tag'}).execute('SELECT * FROM TABLE_THREE')
-        # Untraced command
+        # Untraced command by using unmodified cursor instance
         cursor.executemany('INSERT INTO TABLE VALUES (%s, %s)',
                            [('one', 'two'), ('three', 'four')])
 
