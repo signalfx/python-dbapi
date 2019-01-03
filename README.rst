@@ -88,6 +88,7 @@ named argument and several traced method disabling flags: ``trace_execute``, ``t
                                 trace_callproc=False, trace_commit=False)
     # Note that the default OpenTracing 'db.type' tag will have 'sql' as a value.
     # If a more specific type is desired, you can set it with the span_tags dictionary argument as shown.
+
 Trace All Cursor Commands
 -------------------------
 
