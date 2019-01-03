@@ -19,21 +19,21 @@ class ConnectionTracing(wrapt.ObjectProxy):
         super(ConnectionTracing, self).__init__(connection)
         self._self_tracer = tracer or opentracing.tracer
         self._self_span_tags = span_tags or {}
+        self._self_commit_operation_name = _operation_name(self, self.__wrapped__.commit)
+        self._self_rollback_operation_name = _operation_name(self, self.__wrapped__.rollback)
 
     def cursor(self, *args, **kwargs):
         return Cursor(self.__wrapped__.cursor(*args, **kwargs), self._self_tracer, self._self_span_tags)
 
     def commit(self):
-        operation_name = _operation_name(self, self.__wrapped__.commit)
-        with self._self_tracer.start_active_span(operation_name) as scope:
+        with self._self_tracer.start_active_span(self._self_commit_operation_name) as scope:
             scope.span.set_tag(tags.DATABASE_TYPE, 'sql')
             for tag, value in self._self_span_tags.items():
                 scope.span.set_tag(tag, value)
             return self.__wrapped__.commit()
 
     def rollback(self):
-        operation_name = _operation_name(self, self.__wrapped__.rollback)
-        with self._self_tracer.start_active_span(operation_name) as scope:
+        with self._self_tracer.start_active_span(self._self_rollback_operation_name) as scope:
             scope.span.set_tag(tags.DATABASE_TYPE, 'sql')
             for tag, value in self._self_span_tags.items():
                 scope.span.set_tag(tag, value)
@@ -43,9 +43,15 @@ class ConnectionTracing(wrapt.ObjectProxy):
         return self.cursor()
 
     def __exit__(self, exc, value, tb):
-        # Pass ConnectionTracing instance to wrapped's __exit__()
-        # for traced commit() and rollback()
-        return self.__wrapped__.__class__.__exit__(self, exc, value, tb)
+        # C extension clients (e.g. psycopg2) require self.__wrapped__.__class__ to be in ConnectionTracing.__bases__,
+        # which wrapt doesn't provide.  We need to trace w/ a best-guess operation here instead of passing self to
+        # self.__wrapped__.__class__.__exit__() as we can w/ pure python clients.
+        operation_name = self._self_rollback_operation_name if exc else self._self_commit_operation_name
+        with self._self_tracer.start_active_span(operation_name) as scope:
+            scope.span.set_tag(tags.DATABASE_TYPE, 'sql')
+            for tag, value in self._self_span_tags.items():
+                scope.span.set_tag(tag, value)
+            return self.__wrapped__.__exit__(exc, value, tb)
 
 
 class Cursor(wrapt.ObjectProxy):

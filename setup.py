@@ -27,7 +27,7 @@ with open(os.path.join(cwd, 'README.rst')) as readme_file:
 
 # Keep these separated for tox extras
 test_requirements = ['mock', 'pytest']
-integration_test_requirements = ['docker', 'pymysql']
+integration_test_requirements = ['docker', 'psycopg2', 'pymysql']
 
 setup(
     name='DBAPI-OpenTracing',
