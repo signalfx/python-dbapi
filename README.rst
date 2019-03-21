@@ -66,6 +66,27 @@ or
     connection = db_api_compatible_client.connect(...)
     tracing = ConnectionTracing(connection)
 
+For expanded usage with Psycopg connection factories, a ``PsycopgConnectionTracing`` class is also available.  This
+is necessary for directly using extensions and extras functions on traced connections.  Its non-default usage requires a
+lambda proxy or closure to account for the expected tracing arguments, while using the global tracer and default allow
+it to be passed directly:
+
+ .. code-block:: python
+
+    from dbapi_opentracing import PsycopgConnectionTracing
+    import opentracing
+    import psycopg2
+
+    opentracing_tracer = ## some OpenTracing tracer implementation
+    my_tags = dict(some='tag')
+    tracing = psycopg2.connect(
+        ..., connection_factory=lambda dsn: PsycopgConnectionTracing(dsn, tracer=opentracing_tracer, span_tags=my_tags)
+    )
+
+    # or to use all defaults
+    opentracing.tracer = opentracing_tracer
+    tracing = psycopg2.connect(..., connection_factory=PsycopgConnectionTracing)
+
 ConnectionTracing Configuration
 -------------------------------
 

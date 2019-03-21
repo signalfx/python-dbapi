@@ -29,14 +29,14 @@ def mysql_container():
     try:
         yield mysql
     finally:
-        mysql.remove(force=True)
+        mysql.remove(v=True, force=True)
 
 
 class PyMySQLTest(DBAPITest):
 
     @pytest.fixture
     def connection_tracing(self, mysql_container):
-        while True:
+        for _ in range(240):
             try:
                 conn = pymysql.connect(host='127.0.0.1', user='test_user', password='test_password',
                                        db='test_db', port=3306, cursorclass=DictCursor)
@@ -53,7 +53,7 @@ class TestPyMYSQLCursorContext(PyMySQLTest):
         tracer, conn = connection_tracing
         with tracer.start_active_span('Parent'):
             with conn.cursor() as cursor:
-                cursor.execute('insert into table_one values (%s, %s, %s, %s)',
+                cursor.execute(u'insert into table_one values (%s, %s, %s, %s)',
                                (self.random_string(), self.random_string(),
                                 datetime.now(), datetime.now()))
                 cursor.execute('insert into table_two values (%s, %s, %s, %s)',
@@ -168,7 +168,7 @@ class TestPyMYSQLCursorContext(PyMySQLTest):
         with tracer.start_active_span('Parent'):
             with conn.cursor() as cursor:
                 cursor.callproc('test_procedure_one')
-                cursor.callproc('test_procedure_two')
+                cursor.callproc(u'test_procedure_two')
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
