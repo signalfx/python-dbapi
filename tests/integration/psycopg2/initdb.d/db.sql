@@ -39,7 +39,7 @@ create or replace function test_function_two() returns test_type
 
 
 drop role if exists test_user;
-create role test_user with login password 'test_password';
+create role test_user with replication login password 'test_password';
 
 grant all privileges on database test_db TO test_user;
 grant all privileges on schema test_schema TO test_user;

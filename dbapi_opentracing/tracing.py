@@ -5,20 +5,23 @@ import opentracing
 import wrapt
 
 
-def _operation_name(caller, function, statement=''):
+def _operation_name(caller, func, statement=''):
     """Span operation name obtained from caller's method and sql statement, if any."""
     class_name = caller.__class__.__name__
-    operation_name = function.__name__
-    return '{}.{}({})'.format(class_name, operation_name, statement)
+    operation_name = func.__name__
+    if isinstance(statement, bytes):
+        statement = statement.decode('utf8', 'replace')
+    return u'{}.{}({})'.format(class_name, operation_name, statement)
 
 
-class ConnectionTracing(wrapt.ObjectProxy):
-    """A wrapper for a DB API Connection object with traced commit() and rollback() methods."""
+class _ConnectionTracing(object):
+    """
+    Base for traced connections.  Tracer and trace flag attributes will be in ObjectProxy attribute format despite not
+    having direct wrapt parent class, to ensure their functionality in ConnectionTracing.
+    """
 
-    def __init__(self, connection, tracer=None, span_tags=None,
-                 trace_commit=True, trace_rollback=True, trace_execute=True,
+    def __init__(self, tracer=None, span_tags=None, trace_commit=True, trace_rollback=True, trace_execute=True,
                  trace_executemany=True, trace_callproc=True, *args, **kwargs):
-        super(ConnectionTracing, self).__init__(connection)
         self._self_tracer = tracer or opentracing.tracer
         self._self_span_tags = span_tags or {}
         self._self_trace_commit = trace_commit
@@ -26,6 +29,37 @@ class ConnectionTracing(wrapt.ObjectProxy):
         self._self_trace_execute = trace_execute
         self._self_trace_executemany = trace_executemany
         self._self_trace_callproc = trace_callproc
+
+    def _traced_execution(self, operation_name, func, *args, **kwargs):
+        """Execute function under active span and return its value"""
+        with self._self_tracer.start_active_span(operation_name) as scope:
+            span = scope.span
+            span.set_tag(tags.DATABASE_TYPE, 'sql')
+            for tag, value in self._self_span_tags.items():
+                scope.span.set_tag(tag, value)
+
+            try:
+                val = func(*args, **kwargs)
+            except Exception:
+                span.set_tag(tags.ERROR, True)
+                span.log_kv({'event': 'error',
+                             'error.object': traceback.format_exc()})
+                raise
+            return val
+
+    def __enter__(self):
+        return self.cursor()
+
+
+class ConnectionTracing(_ConnectionTracing, wrapt.ObjectProxy):
+    """A wrapper for instantiated DB API Connection objects with traced commit() and rollback() methods."""
+
+    def __init__(self, connection, tracer=None, span_tags=None, trace_commit=True, trace_rollback=True,
+                 trace_execute=True, trace_executemany=True, trace_callproc=True, *args, **kwargs):
+        wrapt.ObjectProxy.__init__(self, connection)
+        _ConnectionTracing.__init__(self, tracer, span_tags, trace_commit, trace_rollback, trace_execute,
+                                    trace_executemany, trace_callproc)
+
         self._self_commit_operation_name = _operation_name(self, self.__wrapped__.commit)
         self._self_rollback_operation_name = _operation_name(self, self.__wrapped__.rollback)
 
@@ -40,29 +74,20 @@ class ConnectionTracing(wrapt.ObjectProxy):
         if not self._self_trace_commit:
             return self.__wrapped__.commit()
 
-        with self._self_tracer.start_active_span(self._self_commit_operation_name) as scope:
-            scope.span.set_tag(tags.DATABASE_TYPE, 'sql')
-            for tag, value in self._self_span_tags.items():
-                scope.span.set_tag(tag, value)
-            return self.__wrapped__.commit()
+        return self._traced_execution(self._self_commit_operation_name, self.__wrapped__.commit)
 
     def rollback(self):
         if not self._self_trace_rollback:
             return self.__wrapped__.rollback()
 
-        with self._self_tracer.start_active_span(self._self_rollback_operation_name) as scope:
-            scope.span.set_tag(tags.DATABASE_TYPE, 'sql')
-            for tag, value in self._self_span_tags.items():
-                scope.span.set_tag(tag, value)
-            return self.__wrapped__.rollback()
-
-    def __enter__(self):
-        return self.cursor()
+        return self._traced_execution(self._self_rollback_operation_name, self.__wrapped__.rollback)
 
     def __exit__(self, exc, value, tb):
         # C extension clients (e.g. psycopg2) require self.__wrapped__.__class__ to be in ConnectionTracing.__bases__,
-        # which wrapt doesn't provide.  We need to trace w/ a best-guess operation here instead of passing self to
-        # self.__wrapped__.__class__.__exit__() as we can w/ pure python clients.
+        # which wrapt cannot provide due to __slots__ conflict.  We need to trace w/ a best-guess operation here instead
+        # of passing self to self.__wrapped__.__class__.__exit__() as we can w/ pure python clients. For psycopg tracing
+        # in general, using PsycopgConnectionTracing is required for full functionality to allow traced commit/rollback
+        # from __exit__() as well as compatibility with extensions and extras.
         if exc:
             if not self._self_trace_rollback:
                 return self.__wrapped__.__exit__(exc, value, tb)
@@ -72,39 +97,47 @@ class ConnectionTracing(wrapt.ObjectProxy):
                 return self.__wrapped__.__exit__(exc, value, tb)
             operation_name = self._self_commit_operation_name
 
-        with self._self_tracer.start_active_span(operation_name) as scope:
-            scope.span.set_tag(tags.DATABASE_TYPE, 'sql')
-            for tag, value in self._self_span_tags.items():
-                scope.span.set_tag(tag, value)
-            return self.__wrapped__.__exit__(exc, value, tb)
+        return self._traced_execution(operation_name, self.__wrapped__.__exit__, exc, value, tb)
 
 
-class Cursor(wrapt.ObjectProxy):
-    """A wrapper for a DB API Cursor object with traced execute(), executemany(), and callproc() methods."""
+class _Cursor(object):
+    """
+    Base for traced cursors.  Tracer and trace flag attributes will be in ObjectProxy attribute format despite not
+    having direct wrapt parent class, to ensure their functionality in CursorTracing.
+    """
 
-    def __init__(self, cursor, tracer=None, span_tags=None,
-                 trace_execute=True, trace_executemany=True, trace_callproc=True, *args, **kwargs):
-        super(Cursor, self).__init__(cursor)
+    def __init__(self, tracer=None, span_tags=None, trace_execute=True, trace_executemany=True, trace_callproc=True,
+                 *args, **kwargs):
         self._self_tracer = tracer or opentracing.tracer
         self._self_span_tags = span_tags or {}
         self._self_trace_execute = trace_execute
         self._self_trace_executemany = trace_executemany
         self._self_trace_callproc = trace_callproc
 
-    def _format_query(self, query):
-        return ' '.join(query.split(' '))
+    def _get_statement(self, args):
+        """Converts _traced_execution() `args` to partial operation name statement"""
+        raise NotImplementedError
 
-    def _traced_execution(self, function, *args, **kwargs):
-        statement = args[0].split(' ')[0]
-        operation_name = _operation_name(self, function, statement)
+    def _get_query(self, args):
+        """Converts _traced_execution() `args` to db.statement tag value"""
+        raise NotImplementedError
+
+    def _format_query(self, query):
+        if isinstance(query, bytes):
+            return query.decode('utf8', 'replace')
+        return query
+
+    def _traced_execution(self, func, *args, **kwargs):
+        statement = self._get_statement(args)
+        operation_name = _operation_name(self, func, statement)
         with self._self_tracer.start_active_span(operation_name) as scope:
             span = scope.span
             span.set_tag(tags.DATABASE_TYPE, 'sql')
-            span.set_tag(tags.DATABASE_STATEMENT, self._format_query(args[0]))
+            span.set_tag(tags.DATABASE_STATEMENT, self._get_query(args))
             for tag, value in self._self_span_tags.items():
                 span.set_tag(tag, value)
             try:
-                val = function(*args, **kwargs)
+                val = func(*args, **kwargs)
             except Exception:
                 span.set_tag(tags.ERROR, True)
                 span.log_kv({'event': 'error',
@@ -112,6 +145,28 @@ class Cursor(wrapt.ObjectProxy):
                 raise
             span.set_tag('db.rows_produced', self.rowcount)
         return val
+
+    def __enter__(self):
+        return self
+
+
+class Cursor(_Cursor, wrapt.ObjectProxy):
+    """A wrapper for a DB API Cursor object with traced execute(), executemany(), and callproc() methods."""
+
+    def __init__(self, cursor, tracer=None, span_tags=None, trace_execute=True, trace_executemany=True,
+                 trace_callproc=True, *args, **kwargs):
+        wrapt.ObjectProxy.__init__(self, cursor)
+        _Cursor.__init__(self, tracer, span_tags, trace_execute, trace_executemany, trace_callproc)
+
+    def _get_statement(self, args):
+        if isinstance(args[0], bytes):
+            arg = args[0].decode('utf8', 'replace')
+        else:
+            arg = args[0]
+        return arg.split(' ')[0]
+
+    def _get_query(self, args):
+        return self._format_query(args[0])
 
     def execute(self, *args, **kwargs):
         if not self._self_trace_execute:
@@ -130,6 +185,3 @@ class Cursor(wrapt.ObjectProxy):
             return self.__wrapped__.callproc(*args, **kwargs)
 
         return self._traced_execution(self.__wrapped__.callproc, *args, **kwargs)
-
-    def __enter__(self):
-        return self
