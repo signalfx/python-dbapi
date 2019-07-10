@@ -1,4 +1,4 @@
-# Copyright (C) 2018 SignalFx, Inc. All rights reserved.
+# Copyright (C) 2018-2019 SignalFx, Inc. All rights reserved.
 from datetime import datetime
 from time import sleep
 import os.path
@@ -62,11 +62,11 @@ class TestPyMYSQLCursorContext(PyMySQLTest):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.execute(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced'] == 1
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -89,11 +89,11 @@ class TestPyMYSQLCursorContext(PyMySQLTest):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.execute(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags[tags.DATABASE_STATEMENT] == 'insert into table_one values (%s, %s, %s, %s)'
             assert span.parent_id == parent.context.span_id
         assert first.tags['db.rows_produced'] == 1
@@ -120,11 +120,11 @@ class TestPyMYSQLCursorContext(PyMySQLTest):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.executemany(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced'] == 2
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -149,11 +149,11 @@ class TestPyMYSQLCursorContext(PyMySQLTest):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.executemany(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags[tags.DATABASE_STATEMENT] == 'insert into table_one values (%s, %s, %s, %s)'
             assert span.parent_id == parent.context.span_id
         assert first.tags['db.rows_produced'] == 2
@@ -172,10 +172,10 @@ class TestPyMYSQLCursorContext(PyMySQLTest):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced']  # don't make assumptions about db state
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -196,10 +196,10 @@ class TestPyMYSQLCursorContext(PyMySQLTest):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.parent_id == parent.context.span_id
         assert first.operation_name == 'DictCursor.callproc(test_procedure_one)'
         assert second.operation_name == 'DictCursor.callproc(not_a_procedure)'
@@ -227,11 +227,11 @@ class TestPyMYSQLConnectionContext(PyMySQLTest):
                                 self.random_float(), self.random_float()))
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.execute(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced'] == 1
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -253,11 +253,11 @@ class TestPyMYSQLConnectionContext(PyMySQLTest):
                                    (one, two, datetime.now(), datetime.now()))
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, rollback, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.execute(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags[tags.DATABASE_STATEMENT] == 'insert into table_one values (%s, %s, %s, %s)'
             assert span.parent_id == parent.context.span_id
         assert first.tags['db.rows_produced'] == 1
@@ -283,11 +283,11 @@ class TestPyMYSQLConnectionContext(PyMySQLTest):
                                      self.random_float(), self.random_float())])
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.executemany(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced'] == 2
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -311,11 +311,11 @@ class TestPyMYSQLConnectionContext(PyMySQLTest):
                                         (three, four, datetime.now(), datetime.now())])
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, rollback, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.executemany(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags[tags.DATABASE_STATEMENT] == 'insert into table_one values (%s, %s, %s, %s)'
             assert span.parent_id == parent.context.span_id
         assert first.tags['db.rows_produced'] == 2
@@ -333,10 +333,10 @@ class TestPyMYSQLConnectionContext(PyMySQLTest):
                 cursor.callproc('test_procedure_two')
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced']  # don't make assumptions about db state
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -356,10 +356,10 @@ class TestPyMYSQLConnectionContext(PyMySQLTest):
                     cursor.callproc('not_a_procedure')
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, rollback, parent = spans
         for span in (first, second):
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.parent_id == parent.context.span_id
         assert first.operation_name == 'DictCursor.callproc(test_procedure_one)'
         assert second.operation_name == 'DictCursor.callproc(not_a_procedure)'

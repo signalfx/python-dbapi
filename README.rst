@@ -105,9 +105,10 @@ named argument and several traced method disabling flags: ``trace_execute``, ``t
     connection = db_api_compatible_client.connect(...)
     tracing = ConnectionTracing(connection, opentracing_tracer,
                                 # span_tags will be used for all generated spans
-                                span_tags={'Custom': 'Tag', tags.DATABASE_TYPE: 'PostgreSQL'},
+                                span_tags={'Custom': 'Tag', tags.DATABASE_TYPE: 'PostgreSQL',
+                                           tags.DATABASE_INSTANCE='myDatabase'},
                                 trace_callproc=False, trace_commit=False)
-    # Note that the default OpenTracing 'db.type' tag will have 'sql' as a value.
+    # Note that the default OpenTracing 'db.type' and 'db.instance' tags will both have 'sql' as their value.
     # If a more specific type is desired, you can set it with the span_tags dictionary argument as shown.
 
 Trace All Cursor Commands

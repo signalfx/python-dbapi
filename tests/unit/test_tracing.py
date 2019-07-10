@@ -1,4 +1,4 @@
-# Copyright (C) 2018 SignalFx, Inc. All rights reserved.
+# Copyright (C) 2018-2019 SignalFx, Inc. All rights reserved.
 import types
 
 from opentracing.mocktracer import MockTracer
@@ -7,6 +7,8 @@ from mock import Mock, patch
 import pytest
 
 from dbapi_opentracing.tracing import ConnectionTracing
+from .conftest import BaseSuite
+
 
 row_count = 'SomeRowCount'
 
@@ -49,7 +51,7 @@ class MockDBAPIConnection(Mock):
         return self.commit()
 
 
-class DBAPITestSuite(object):
+class DBAPITestSuite(BaseSuite):
 
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -66,9 +68,10 @@ class TestConnectionTracingCursorContext(DBAPITestSuite):
             cursor.execute(statement)
         spans = self.tracer.finished_spans()
         assert len(spans) == 1
+        self.assert_base_tags(spans)
+
         span = spans.pop()
         assert span.operation_name == 'MockDBAPICursor.execute(SELECT)'
-        assert span.tags[tags.DATABASE_TYPE] == 'sql'
         assert span.tags[tags.DATABASE_STATEMENT] == statement
         assert span.tags['db.rows_produced'] == row_count
 
@@ -78,9 +81,10 @@ class TestConnectionTracingCursorContext(DBAPITestSuite):
             cursor.executemany(statement)
         spans = self.tracer.finished_spans()
         assert len(spans) == 1
+        self.assert_base_tags(spans)
+
         span = spans.pop()
         assert span.operation_name == 'MockDBAPICursor.executemany(DROP)'
-        assert span.tags[tags.DATABASE_TYPE] == 'sql'
         assert span.tags[tags.DATABASE_STATEMENT] == statement
         assert span.tags['db.rows_produced'] == row_count
 
@@ -90,9 +94,10 @@ class TestConnectionTracingCursorContext(DBAPITestSuite):
             cursor.callproc(procedure)
         spans = self.tracer.finished_spans()
         assert len(spans) == 1
+        self.assert_base_tags(spans)
+
         span = spans.pop()
         assert span.operation_name == 'MockDBAPICursor.callproc(my_procedure)'
-        assert span.tags[tags.DATABASE_TYPE] == 'sql'
         assert span.tags[tags.DATABASE_STATEMENT] == procedure
         assert span.tags['db.rows_produced'] == row_count
 
@@ -123,13 +128,13 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
             cursor.execute(statement)
         spans = self.tracer.finished_spans()
         assert len(spans) == 2
+        self.assert_base_tags(spans)
+
         execute, commit = spans
         assert execute.operation_name == 'MockDBAPICursor.execute(SELECT)'
-        assert execute.tags[tags.DATABASE_TYPE] == 'sql'
         assert execute.tags[tags.DATABASE_STATEMENT] == statement
         assert execute.tags['db.rows_produced'] == row_count
         assert commit.operation_name == 'MockDBAPIConnection.commit()'
-        assert commit.tags == {tags.DATABASE_TYPE: 'sql'}
 
     def test_executemany_and_commit_are_traced(self):
         statement = 'INSERT INTO some_table VALUES (%s, %s, %s)'
@@ -137,13 +142,13 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
             cursor.executemany(statement)
         spans = self.tracer.finished_spans()
         assert len(spans) == 2
+        self.assert_base_tags(spans)
+
         executemany, commit = spans
         assert executemany.operation_name == 'MockDBAPICursor.executemany(INSERT)'
-        assert executemany.tags[tags.DATABASE_TYPE] == 'sql'
         assert executemany.tags[tags.DATABASE_STATEMENT] == statement
         assert executemany.tags['db.rows_produced'] == row_count
         assert commit.operation_name == 'MockDBAPIConnection.commit()'
-        assert commit.tags == {tags.DATABASE_TYPE: 'sql'}
 
     def test_callproc_and_commit_are_traced(self):
         procedure = 'my_procedure'
@@ -151,13 +156,13 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
             cursor.callproc(procedure)
         spans = self.tracer.finished_spans()
         assert len(spans) == 2
+        self.assert_base_tags(spans)
+
         callproc, commit = spans
         assert callproc.operation_name == 'MockDBAPICursor.callproc(my_procedure)'
-        assert callproc.tags[tags.DATABASE_TYPE] == 'sql'
         assert callproc.tags[tags.DATABASE_STATEMENT] == procedure
         assert callproc.tags['db.rows_produced'] == row_count
         assert commit.operation_name == 'MockDBAPIConnection.commit()'
-        assert commit.tags == {tags.DATABASE_TYPE: 'sql'}
 
     def test_execute_and_rollback_are_traced(self):
         statement = 'SELECT * FROM some_table'
@@ -167,15 +172,15 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
                 cursor.execute(statement)
         spans = self.tracer.finished_spans()
         assert len(spans) == 2
+        self.assert_base_tags(spans)
+
         execute, rollback = spans
         assert execute.operation_name == 'MockDBAPICursor.execute(SELECT)'
-        assert execute.tags[tags.DATABASE_TYPE] == 'sql'
         assert execute.tags[tags.DATABASE_STATEMENT] == statement
         assert execute.tags[tags.ERROR] is True
         assert 'db.rows_produced' not in execute.tags
         assert 'SomeException' in execute.logs[0].key_values['error.object']
         assert rollback.operation_name == 'MockDBAPIConnection.rollback()'
-        assert rollback.tags == {tags.DATABASE_TYPE: 'sql'}
 
     def test_executemany_and_rollback_are_traced(self):
         statement = 'INSERT INTO some_table VALUES (%s, %s, %s)'
@@ -185,13 +190,15 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
                 cursor.executemany(statement)
         spans = self.tracer.finished_spans()
         assert len(spans) == 2
+        self.assert_base_tags(spans)
+
         executemany, rollback = spans
         assert executemany.operation_name == 'MockDBAPICursor.executemany(INSERT)'
-        assert executemany.tags[tags.DATABASE_TYPE] == 'sql'
         assert executemany.tags[tags.DATABASE_STATEMENT] == statement
         assert executemany.tags[tags.ERROR] is True
         assert 'db.rows_produced' not in executemany.tags
         assert 'SomeException' in executemany.logs[0].key_values['error.object']
+        assert rollback.operation_name == 'MockDBAPIConnection.rollback()'
 
     def test_callproc_and_rollback_are_traced(self):
         procedure = 'my_procedure'
@@ -201,15 +208,15 @@ class TestConnectionTracingConnectionContext(DBAPITestSuite):
                 cursor.callproc(procedure)
         spans = self.tracer.finished_spans()
         assert len(spans) == 2
+        self.assert_base_tags(spans)
+
         callproc, rollback = spans
         assert callproc.operation_name == 'MockDBAPICursor.callproc(my_procedure)'
-        assert callproc.tags[tags.DATABASE_TYPE] == 'sql'
         assert callproc.tags[tags.DATABASE_STATEMENT] == procedure
         assert callproc.tags[tags.ERROR] is True
         assert 'db.rows_produced' not in callproc.tags
         assert 'SomeException' in callproc.logs[0].key_values['error.object']
         assert rollback.operation_name == 'MockDBAPIConnection.rollback()'
-        assert rollback.tags == {tags.DATABASE_TYPE: 'sql'}
 
 
 class TestConnectionTracingConnectionContextWhitelist(DBAPITestSuite):
@@ -279,5 +286,6 @@ class TestConnectionTracing(object):
         assert len(spans) == 4
         for span in spans:
             assert span.tags[tags.DATABASE_TYPE] == 'sql'
+            assert span.tags[tags.SPAN_KIND] == tags.SPAN_KIND_RPC_CLIENT
             assert span.tags['one'] == 123
             assert span.tags['two'] == 234

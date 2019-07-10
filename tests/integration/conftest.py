@@ -1,6 +1,8 @@
-# Copyright (C) 2018 SignalFx, Inc. All rights reserved.
+# Copyright (C) 2018-2019 SignalFx, Inc. All rights reserved.
 from random import choice, random, randint
 import string
+
+from opentracing.ext import tags
 
 
 class DBAPITest(object):
@@ -32,3 +34,10 @@ class DBAPITest(object):
             if i not in self._floats:
                 self._floats.add(i)
                 return i
+
+    @staticmethod
+    def assert_base_tags(spans):
+        for span in spans:
+            assert span.tags['custom'] == 'tag'
+            assert span.tags[tags.DATABASE_TYPE] == 'sql'
+            assert span.tags[tags.SPAN_KIND] == tags.SPAN_KIND_RPC_CLIENT

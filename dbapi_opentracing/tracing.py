@@ -35,6 +35,8 @@ class _ConnectionTracing(object):
         with self._self_tracer.start_active_span(operation_name) as scope:
             span = scope.span
             span.set_tag(tags.DATABASE_TYPE, 'sql')
+            span.set_tag(tags.SPAN_KIND, tags.SPAN_KIND_RPC_CLIENT)
+
             for tag, value in self._self_span_tags.items():
                 scope.span.set_tag(tag, value)
 
@@ -133,9 +135,12 @@ class _Cursor(object):
         with self._self_tracer.start_active_span(operation_name) as scope:
             span = scope.span
             span.set_tag(tags.DATABASE_TYPE, 'sql')
+            span.set_tag(tags.SPAN_KIND, tags.SPAN_KIND_RPC_CLIENT)
             span.set_tag(tags.DATABASE_STATEMENT, self._get_query(args))
+
             for tag, value in self._self_span_tags.items():
                 span.set_tag(tag, value)
+
             try:
                 val = func(*args, **kwargs)
             except Exception:

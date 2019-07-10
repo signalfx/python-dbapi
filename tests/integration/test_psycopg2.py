@@ -1,4 +1,4 @@
-# Copyright (C) 2018 SignalFx, Inc. All rights reserved.
+# Copyright (C) 2018-2019 SignalFx, Inc. All rights reserved.
 from datetime import datetime
 from time import sleep
 import os.path
@@ -73,12 +73,11 @@ class TestPsycopgCursorContext(Psycopg2Test):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
 
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == "DictCursor.execute(insert)"
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced'] == 1
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -101,11 +100,11 @@ class TestPsycopgCursorContext(Psycopg2Test):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.execute(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags[tags.DATABASE_STATEMENT] == 'insert into table_one values (%s, %s, %s, %s)'
             assert span.parent_id == parent.context.span_id
         assert first.tags['db.rows_produced'] == 1
@@ -132,11 +131,11 @@ class TestPsycopgCursorContext(Psycopg2Test):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.executemany(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced'] == 2
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -161,11 +160,11 @@ class TestPsycopgCursorContext(Psycopg2Test):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'DictCursor.executemany(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags[tags.DATABASE_STATEMENT] == 'insert into table_one values (%s, %s, %s, %s)'
             assert span.parent_id == parent.context.span_id
         assert first.tags['db.rows_produced'] == 2
@@ -184,10 +183,10 @@ class TestPsycopgCursorContext(Psycopg2Test):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced']  # don't make assumptions about db state
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -208,10 +207,10 @@ class TestPsycopgCursorContext(Psycopg2Test):
             conn.commit()
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.parent_id == parent.context.span_id
         assert first.operation_name == 'DictCursor.callproc(test_function_one)'
         assert second.operation_name == 'DictCursor.callproc(not_a_function)'
@@ -239,11 +238,11 @@ class TestPsycopgConnectionContext(Psycopg2Test):
                                 self.random_float(), self.random_float()))
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'cursor.execute(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced'] == 1
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -265,11 +264,11 @@ class TestPsycopgConnectionContext(Psycopg2Test):
                                    (one, two, datetime.now(), datetime.now()))
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, rollback, parent = spans
         for span in (first, second):
             assert span.operation_name == 'cursor.execute(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags[tags.DATABASE_STATEMENT] == 'insert into table_one values (%s, %s, %s, %s)'
             assert span.parent_id == parent.context.span_id
         assert first.tags['db.rows_produced'] == 1
@@ -295,11 +294,11 @@ class TestPsycopgConnectionContext(Psycopg2Test):
                                      self.random_float(), self.random_float())])
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
             assert span.operation_name == 'cursor.executemany(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced'] == 2
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
@@ -323,11 +322,11 @@ class TestPsycopgConnectionContext(Psycopg2Test):
                                         (three, four, datetime.now(), datetime.now())])
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, rollback, parent = spans
         for span in (first, second):
             assert span.operation_name == 'cursor.executemany(insert)'
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags[tags.DATABASE_STATEMENT] == 'insert into table_one values (%s, %s, %s, %s)'
             assert span.parent_id == parent.context.span_id
         assert first.tags['db.rows_produced'] == 2
@@ -345,13 +344,14 @@ class TestPsycopgConnectionContext(Psycopg2Test):
                 cursor.callproc('test_function_two')
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, commit, parent = spans
         for span in (first, second):
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.tags['db.rows_produced']  # don't make assumptions about db state
             assert span.parent_id == parent.context.span_id
             assert tags.ERROR not in span.tags
+
         assert first.tags[tags.DATABASE_STATEMENT] == 'test_function_one'
         assert second.tags[tags.DATABASE_STATEMENT] == 'test_function_two'
         assert first.operation_name == 'cursor.callproc(test_function_one)'
@@ -368,10 +368,10 @@ class TestPsycopgConnectionContext(Psycopg2Test):
                     cursor.callproc('not_a_function')
         spans = tracer.finished_spans()
         assert len(spans) == 4
+        self.assert_base_tags(spans[:3])
+
         first, second, rollback, parent = spans
         for span in (first, second):
-            assert span.tags['custom'] == 'tag'
-            assert span.tags[tags.DATABASE_TYPE] == 'sql'
             assert span.parent_id == parent.context.span_id
         assert first.operation_name == 'cursor.callproc(test_function_one)'
         assert second.operation_name == 'cursor.callproc(not_a_function)'
