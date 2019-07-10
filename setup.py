@@ -31,9 +31,9 @@ integration_test_requirements = ['docker']
 
 setup(
     name='DBAPI-OpenTracing',
-    version='0.0.3',
-    url='http://github.com/signalfx/python-dbapi',
-    download_url='http://github.com/signalfx/python-dbapi/tarball/master',
+    version='0.0.4',
+    url='http://github.com/opentracing-contrib/python-dbapi',
+    download_url='http://github.com/opentracing-contrib/python-dbapi/tarball/master',
     author='SignalFx, Inc.',
     author_email='info@signalfx.com',
     description='OpenTracing support for Python DB API',
