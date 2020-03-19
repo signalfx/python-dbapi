@@ -1,2 +1,2 @@
-opentracing>=2.0,<2.1
+opentracing>=2.0,<2.4
 wrapt
