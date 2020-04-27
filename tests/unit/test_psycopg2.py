@@ -173,9 +173,10 @@ class TestPsycopgConnectionTracingConnectionContext(DBAPITestSuite):
         assert commit.operation_name == 'MockDBAPIConnection.commit()'
 
     def test_execute_and_rollback_are_traced(self):
+        error = SomeException('error-message')
         statement = 'SELECT * FROM some_table'
         with self.connection as cursor:
-            with patch.object(MockDBAPICursor, 'execute', side_effect=SomeException()) as execute:
+            with patch.object(MockDBAPICursor, 'execute', side_effect=error) as execute:
                 execute.__name__ = 'execute'
                 cursor.execute(statement)
         spans = self.tracer.finished_spans()
@@ -187,13 +188,17 @@ class TestPsycopgConnectionTracingConnectionContext(DBAPITestSuite):
         assert execute.tags[tags.DATABASE_STATEMENT] == statement
         assert execute.tags[tags.ERROR] is True
         assert 'db.rows_produced' not in execute.tags
-        assert 'SomeException' in execute.logs[0].key_values['error.object']
+        assert execute.tags['sfx.error.kind'] == 'SomeException'
+        assert execute.tags['sfx.error.message'] == 'error-message'
+        assert execute.tags['sfx.error.object'] == str(error.__class__)
+        assert len(execute.tags['sfx.error.stack']) > 50
         assert rollback.operation_name == 'MockDBAPIConnection.rollback()'
 
     def test_executemany_and_rollback_are_traced(self):
+        error = SomeException('message')
         statement = u'INSERT INTO some_table VALUES (%s, %s, %s)'
         with self.connection as cursor:
-            with patch.object(MockDBAPICursor, 'executemany', side_effect=SomeException()) as executemany:
+            with patch.object(MockDBAPICursor, 'executemany', side_effect=error) as executemany:
                 executemany.__name__ = 'executemany'
                 cursor.executemany(statement)
         spans = self.tracer.finished_spans()
@@ -205,14 +210,18 @@ class TestPsycopgConnectionTracingConnectionContext(DBAPITestSuite):
         assert executemany.tags[tags.DATABASE_STATEMENT] == statement
         assert executemany.tags[tags.ERROR] is True
         assert 'db.rows_produced' not in executemany.tags
-        assert 'SomeException' in executemany.logs[0].key_values['error.object']
+        assert executemany.tags['sfx.error.kind'] == 'SomeException'
+        assert executemany.tags['sfx.error.message'] == 'message'
+        assert executemany.tags['sfx.error.object'] == str(error.__class__)
+        assert len(executemany.tags['sfx.error.stack']) > 50
         assert rollback.operation_name == 'MockDBAPIConnection.rollback()'
 
     def test_callproc_and_rollback_are_traced(self):
+        error = SomeException('message')
         procedure = b'\x80my_procedure'  # invalid start byte
         expected = b'\x80my_procedure'.decode('utf-8', 'replace')
         with self.connection as cursor:
-            with patch.object(MockDBAPICursor, 'callproc', side_effect=SomeException()) as callproc:
+            with patch.object(MockDBAPICursor, 'callproc', side_effect=error) as callproc:
                 callproc.__name__ = 'callproc'
                 cursor.callproc(procedure)
         spans = self.tracer.finished_spans()
@@ -224,7 +233,10 @@ class TestPsycopgConnectionTracingConnectionContext(DBAPITestSuite):
         assert callproc.tags[tags.DATABASE_STATEMENT] == expected
         assert callproc.tags[tags.ERROR] is True
         assert 'db.rows_produced' not in callproc.tags
-        assert 'SomeException' in callproc.logs[0].key_values['error.object']
+        assert callproc.tags['sfx.error.kind'] == 'SomeException'
+        assert callproc.tags['sfx.error.message'] == 'message'
+        assert callproc.tags['sfx.error.object'] == str(error.__class__)
+        assert len(callproc.tags['sfx.error.stack']) > 50
         assert rollback.operation_name == 'MockDBAPIConnection.rollback()'
 
 
