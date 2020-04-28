@@ -42,10 +42,12 @@ class _ConnectionTracing(object):
 
             try:
                 val = func(*args, **kwargs)
-            except Exception:
+            except Exception as e:
                 span.set_tag(tags.ERROR, True)
-                span.log_kv({'event': 'error',
-                             'error.object': traceback.format_exc()})
+                span.set_tag('sfx.error.message', str(e))
+                span.set_tag('sfx.error.object', str(e.__class__))
+                span.set_tag('sfx.error.kind', e.__class__.__name__)
+                span.set_tag('sfx.error.stack', traceback.format_exc())
                 raise
             return val
 
@@ -143,10 +145,12 @@ class _Cursor(object):
 
             try:
                 val = func(*args, **kwargs)
-            except Exception:
+            except Exception as e:
                 span.set_tag(tags.ERROR, True)
-                span.log_kv({'event': 'error',
-                             'error.object': traceback.format_exc()})
+                span.set_tag('sfx.error.message', str(e))
+                span.set_tag('sfx.error.object', str(e.__class__))
+                span.set_tag('sfx.error.kind', e.__class__.__name__)
+                span.set_tag('sfx.error.stack', traceback.format_exc())
                 raise
             span.set_tag('db.rows_produced', self.rowcount)
         return val
