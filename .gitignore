@@ -6,6 +6,7 @@
 .coverage
 .python-version
 .tox
+venv/
 build/
 dist/
 htmlcov/
