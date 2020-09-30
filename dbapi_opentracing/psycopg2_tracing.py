@@ -5,9 +5,11 @@ from .tracing import _ConnectionTracing, _Cursor, _operation_name
 try:
     from psycopg2.extensions import connection as PsycopgConnection
     from psycopg2.extensions import cursor as PsycopgCursor
+    from psycopg2.sql import Composed
 except ImportError:
     PsycopgConnection = object
     PsycopgCursor = object
+    Composed = type('Composed', tuple(), {}) 
 
 
 class _PsycopgCursorTracing(_Cursor):
@@ -24,12 +26,21 @@ class _PsycopgCursorTracing(_Cursor):
     def _get_statement(self, args):
         if isinstance(args[1], bytes):
             arg = args[1].decode('utf8', 'replace')
+        elif isinstance(args[1], Composed):
+            if len(args[1].seq) > 0:
+                arg = args[1].seq[0].string
+            else:
+                arg = ''
         else:
             arg = args[1]
         return arg.split(' ')[0]
 
     def _get_query(self, args):
-        return self._format_query(args[1])
+        if isinstance(args[1], Composed):
+            query = ' '.join([sql.string for sql in args[1].seq])
+        else:
+            query = args[1]
+        return self._format_query(query)
 
     def execute(self, *args, **kwargs):
         if not self._self_trace_execute:
