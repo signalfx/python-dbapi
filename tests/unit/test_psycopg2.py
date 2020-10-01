@@ -5,8 +5,10 @@ import types
 
 from opentracing.mocktracer import MockTracer
 from opentracing.ext import tags
-from mock import Mock, patch
+from psycopg2 import sql
 import pytest
+from mock import Mock, patch
+
 
 from dbapi_opentracing.psycopg2_tracing import PsycopgConnectionTracing
 from .conftest import BaseSuite
@@ -238,6 +240,23 @@ class TestPsycopgConnectionTracingConnectionContext(DBAPITestSuite):
         assert callproc.tags['sfx.error.object'] == str(error.__class__)
         assert len(callproc.tags['sfx.error.stack']) > 50
         assert rollback.operation_name == 'MockDBAPIConnection.rollback()'
+
+    def test_composed_queries_are_traced(self):
+        query = sql.Composed([sql.SQL("SELECT * FROM"), sql.Identifier("SOME_TABLE")])
+
+        with self.connection as cursor:
+            assert isinstance(cursor, MockDBAPICursor)
+            cursor.execute(query)
+
+        spans = self.tracer.finished_spans()
+        assert len(spans) == 2
+        self.assert_base_tags(spans)
+
+        execute, commit = spans
+        assert execute.operation_name == 'MockDBAPICursor.execute(SELECT)'
+        assert execute.tags[tags.DATABASE_STATEMENT] == 'SELECT * FROM SOME_TABLE'
+        assert execute.tags['db.rows_produced'] == row_count
+        assert commit.operation_name == 'MockDBAPIConnection.commit()'
 
 
 class TestPsycopgConnectionTracingConnectionContextWhitelist(DBAPITestSuite):
