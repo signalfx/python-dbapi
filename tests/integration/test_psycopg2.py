@@ -6,7 +6,7 @@ import os.path
 from opentracing.mocktracer import MockTracer
 from psycopg2.extras import LogicalReplicationConnection, DictCursor, register_uuid
 from opentracing.ext import tags
-from psycopg2 import extensions
+from psycopg2 import extensions, sql
 import opentracing
 import psycopg2
 import docker
@@ -383,3 +383,23 @@ class TestPsycopgConnectionContext(Psycopg2Test):
         assert second.tags[tags.ERROR] is True
         assert rollback.operation_name == 'LogicalReplicationConnection.rollback()'
         assert parent.operation_name == 'Parent'
+
+    def test_composed_queries_are_traced(self, connection_tracing):
+        tracer, conn = connection_tracing
+        with conn as cursor:
+            cursor.execute(
+                sql.SQL("INSERT INTO table_one values (%s, %s, %s, %s)").format(
+                    sql.Identifier("table_one")
+                ),
+                (self.random_string(), self.random_string(), datetime.now(), datetime.now(),)
+            )
+
+        spans = tracer.finished_spans()
+        assert len(spans) == 2
+        self.assert_base_tags(spans)
+
+        execute, commit = spans
+        assert execute.operation_name == 'cursor.execute(INSERT)'
+        assert execute.tags[tags.DATABASE_STATEMENT] == 'INSERT INTO table_one values (%s, %s, %s, %s)'
+        assert execute.tags['db.rows_produced'] == 1
+        assert commit.operation_name == 'LogicalReplicationConnection.commit()'

@@ -36,10 +36,9 @@ class _PsycopgCursorTracing(_Cursor):
         return arg.split(' ')[0]
 
     def _get_query(self, args):
-        if isinstance(args[1], Composed):
-            query = ' '.join([sql.string for sql in args[1].seq])
-        else:
-            query = args[1]
+        query = args[1]
+        if isinstance(query, Composed):
+            query = query.as_string(self.connection)
         return self._format_query(query)
 
     def execute(self, *args, **kwargs):
