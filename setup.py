@@ -30,10 +30,10 @@ test_requirements = ['mock', 'pytest']
 integration_test_requirements = ['docker']
 
 setup(
-    name='DBAPI-OpenTracing',
-    version='0.0.5post2',
-    url='http://github.com/opentracing-contrib/python-dbapi',
-    download_url='http://github.com/opentracing-contrib/python-dbapi/tarball/master',
+    name='signalfx-instrumentation-dbapi',
+    version='1.0.0',
+    url='http://github.com/signalfx/python-dbapi',
+    download_url='http://github.com/signalfx/python-dbapi/tarball/main',
     author='SignalFx, Inc.',
     author_email='info@signalfx.com',
     description='OpenTracing support for Python DB API',

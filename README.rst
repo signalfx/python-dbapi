@@ -28,7 +28,7 @@ Run the following command:
 
 .. code-block:: 
 
-    $ pip install dbapi-opentracing
+    $ pip install signalfx-instrumentation-dbapi
 
 Usage
 =====
